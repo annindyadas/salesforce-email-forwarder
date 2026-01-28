@@ -15,9 +15,11 @@ This feature provides a user-friendly modal interface that displays all emails a
 - **Interactive Data Table** - Lightning Datatable with sortable columns and row-level checkboxes for email selection
 - **Bulk Selection** - Select multiple emails at once using the header checkbox
 - **EML Format** - Emails are forwarded as `.eml` files that can be opened in any email client
+- **Download as ZIP** - Download all selected emails as a single ZIP file containing individual `.eml` files (no external libraries required)
 - **Configurable Recipient** - Enter any email address as the forwarding destination
 - **Modern UI** - Clean, responsive design with SLDS styling and custom blue header
 - **Error Handling** - Comprehensive error messages and validation
+- **AppExchange Ready** - Follows Salesforce security best practices including CRUD/FLS enforcement and `with sharing` keyword
 
 ## 🏗️ Components
 
@@ -25,7 +27,8 @@ This feature provides a user-friendly modal interface that displays all emails a
 
 | Class | Description |
 |-------|-------------|
-| `CaseEmailForwarder.cls` | Main controller class with methods for retrieving emails and forwarding them as EML attachments |
+| `EmailForwarder.cls` | Main controller class with methods for retrieving emails and forwarding them as EML attachments |
+| `EmailForwarderTest.cls` | Comprehensive test class with 22+ test methods for security and functionality coverage |
 
 ### Lightning Web Components
 
@@ -84,9 +87,10 @@ Ensure your org's email deliverability is configured:
 1. Navigate to any record that has associated emails (e.g., a Case)
 2. Click the **Forward Emails** action button
 3. The modal will display all emails associated with the record
-4. Enter the recipient email address
-5. Select the emails you want to forward using the checkboxes
-6. Click **Send** to forward the selected emails as `.eml` attachments
+4. Select the emails you want using the checkboxes
+5. Choose your action:
+   - **Send**: Enter the recipient email address and click **Send** to forward the selected emails as `.eml` attachments
+   - **Download**: Click **Download** to download all selected emails as a single ZIP file containing individual `.eml` files
 
 ## 📁 Project Structure
 
@@ -95,8 +99,10 @@ force-app/
 └── main/
     └── default/
         ├── classes/
-        │   ├── CaseEmailForwarder.cls
-        │   └── CaseEmailForwarder.cls-meta.xml
+        │   ├── EmailForwarder.cls
+        │   ├── EmailForwarder.cls-meta.xml
+        │   ├── EmailForwarderTest.cls
+        │   └── EmailForwarderTest.cls-meta.xml
         └── lwc/
             └── emailForwarderModal/
                 ├── emailForwarderModal.html
