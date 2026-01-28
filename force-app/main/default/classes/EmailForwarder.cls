@@ -14,6 +14,8 @@ public with sharing class EmailForwarder {
     private static final Integer DEFAULT_PAGE_SIZE = 50;
     // Maximum page size allowed
     private static final Integer MAX_PAGE_SIZE = 200;
+    // Maximum emails for download/forward operations
+    private static final Integer MAX_EMAILS = 1000;
 
     /**
      * Forwards selected emails to the specified recipient
