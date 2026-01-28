@@ -1,4 +1,17 @@
-public class EmailForwarder {
+/**
+ * EmailForwarder - Apex controller for Email Forwarder LWC
+ * Handles retrieving and forwarding emails as EML attachments
+ * 
+ * Security: Uses 'with sharing' to enforce record-level security
+ * All SOQL queries check CRUD/FLS permissions before execution
+ * 
+ * @author Annindya Das
+ * @version 1.0
+ */
+public with sharing class EmailForwarder {
+
+    // Maximum number of emails to query/process
+    private static final Integer MAX_EMAILS = 1000;
 
     /**
      * Invocable method for Flow/Process Builder integration
@@ -31,21 +44,35 @@ public class EmailForwarder {
                 throw new AuraHandledException('Recipient email address is required.');
             }
             
+            // Validate email format
+            if (!isValidEmail(recipientEmail)) {
+                throw new AuraHandledException('Please enter a valid email address.');
+            }
+            
             String result = forwardEmailsToRecipient(emailIds, recipientEmail);
             return result;
         } catch (AuraHandledException e) {
             throw e;
         } catch (Exception e) {
-            throw new AuraHandledException('Error forwarding emails: ' + e.getMessage() + ' | Line: ' + e.getLineNumber());
+            throw new AuraHandledException('Error forwarding emails: ' + e.getMessage());
         }
     }
 
     /**
      * Retrieves all EmailMessages related to a specific record
+     * Enforces CRUD/FLS security checks
      */
     @AuraEnabled(cacheable=true)
     public static List<EmailMessageWrapper> getEmailsByRecordId(Id recordId) {
         try {
+            // Check if user has read access to EmailMessage object
+            if (!Schema.sObjectType.EmailMessage.isAccessible()) {
+                throw new AuraHandledException('You do not have permission to view email messages.');
+            }
+            
+            // Check field-level security for each field we're querying
+            checkFieldReadAccess();
+            
             List<EmailMessageWrapper> wrapperList = new List<EmailMessageWrapper>();
             
             // Query EmailMessages where the RelatedToId matches the record
@@ -53,7 +80,9 @@ public class EmailForwarder {
                 SELECT Id, Subject, FromAddress, ToAddress, MessageDate, Status, Incoming
                 FROM EmailMessage 
                 WHERE RelatedToId = :recordId
+                WITH SECURITY_ENFORCED
                 ORDER BY MessageDate DESC
+                LIMIT :MAX_EMAILS
             ];
             
             for (EmailMessage em : emails) {
@@ -61,6 +90,11 @@ public class EmailForwarder {
             }
             
             return wrapperList;
+        } catch (System.QueryException qe) {
+            // Handle SECURITY_ENFORCED exceptions
+            throw new AuraHandledException('You do not have permission to access one or more email fields.');
+        } catch (AuraHandledException e) {
+            throw e;
         } catch (Exception e) {
             throw new AuraHandledException('Error retrieving emails: ' + e.getMessage());
         }
@@ -77,10 +111,17 @@ public class EmailForwarder {
                 throw new AuraHandledException('No emails selected for download.');
             }
 
+            // Check object-level access
+            if (!Schema.sObjectType.EmailMessage.isAccessible()) {
+                throw new AuraHandledException('You do not have permission to view email messages.');
+            }
+
             Map<Id, EmailMessage> emailMap = new Map<Id, EmailMessage>([
                 SELECT Subject, HtmlBody, TextBody, FromAddress, ToAddress, MessageDate 
                 FROM EmailMessage 
                 WHERE Id IN :emailIds
+                WITH SECURITY_ENFORCED
+                LIMIT :MAX_EMAILS
             ]);
 
             if (emailMap.isEmpty()) {
@@ -93,11 +134,11 @@ public class EmailForwarder {
                 EmailMessage em = emailMap.get(emailId);
                 if (em == null) continue;
 
-                String fromAddr = em.FromAddress != null ? em.FromAddress : '';
-                String toAddr = em.ToAddress != null ? em.ToAddress : '';
-                String subject = em.Subject != null ? em.Subject : '(No Subject)';
+                String fromAddr = String.isNotBlank(em.FromAddress) ? em.FromAddress : '';
+                String toAddr = String.isNotBlank(em.ToAddress) ? em.ToAddress : '';
+                String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
                 String dateStr = em.MessageDate != null ? em.MessageDate.formatGmt('EEE, d MMM yyyy HH:mm:ss Z') : '';
-                String body = em.HtmlBody != null ? em.HtmlBody : (em.TextBody != null ? em.TextBody : '');
+                String body = String.isNotBlank(em.HtmlBody) ? em.HtmlBody : (String.isNotBlank(em.TextBody) ? em.TextBody : '');
 
                 String emlContent = 'From: ' + fromAddr + '\r\n' +
                                     'To: ' + toAddr + '\r\n' +
@@ -109,7 +150,11 @@ public class EmailForwarder {
                 
                 String safeSubject = subject.replaceAll('[^a-zA-Z0-9]', '_');
                 if (String.isBlank(safeSubject)) {
-                    safeSubject = 'Email_' + emailId;
+                    safeSubject = 'Email_' + String.valueOf(emailId).left(15);
+                }
+                // Limit filename length to prevent issues
+                if (safeSubject.length() > 50) {
+                    safeSubject = safeSubject.left(50);
                 }
                 
                 emailContents.add(new EmailContentWrapper(safeSubject + '.eml', emlContent));
@@ -117,6 +162,8 @@ public class EmailForwarder {
             
             return emailContents;
             
+        } catch (System.QueryException qe) {
+            throw new AuraHandledException('You do not have permission to access one or more email fields.');
         } catch (AuraHandledException e) {
             throw e;
         } catch (Exception e) {
@@ -146,10 +193,22 @@ public class EmailForwarder {
             throw new AuraHandledException('Invalid parameters: emailIds or recipientEmail is empty.');
         }
 
+        // Validate email format
+        if (!isValidEmail(recipientEmail)) {
+            throw new AuraHandledException('Please enter a valid email address.');
+        }
+
+        // Check object-level access
+        if (!Schema.sObjectType.EmailMessage.isAccessible()) {
+            throw new AuraHandledException('You do not have permission to view email messages.');
+        }
+
         Map<Id, EmailMessage> emailMap = new Map<Id, EmailMessage>([
-            SELECT Subject, HtmlBody, TextBody, FromAddress, ToAddress, MessageDate, Parent.Contact.Email 
+            SELECT Subject, HtmlBody, TextBody, FromAddress, ToAddress, MessageDate 
             FROM EmailMessage 
             WHERE Id IN :emailIds
+            WITH SECURITY_ENFORCED
+            LIMIT :MAX_EMAILS
         ]);
 
         if (emailMap.isEmpty()) {
@@ -162,12 +221,12 @@ public class EmailForwarder {
             EmailMessage em = emailMap.get(emailId);
             if (em == null) continue;
 
-            // Safe null handling for all fields
-            String fromAddr = em.FromAddress != null ? em.FromAddress : '';
-            String toAddr = em.ToAddress != null ? em.ToAddress : '';
-            String subject = em.Subject != null ? em.Subject : '(No Subject)';
+            // Safe null handling for all fields using String.isNotBlank
+            String fromAddr = String.isNotBlank(em.FromAddress) ? em.FromAddress : '';
+            String toAddr = String.isNotBlank(em.ToAddress) ? em.ToAddress : '';
+            String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
             String dateStr = em.MessageDate != null ? em.MessageDate.formatGmt('EEE, d MMM yyyy HH:mm:ss Z') : '';
-            String body = em.HtmlBody != null ? em.HtmlBody : (em.TextBody != null ? em.TextBody : '');
+            String body = String.isNotBlank(em.HtmlBody) ? em.HtmlBody : (String.isNotBlank(em.TextBody) ? em.TextBody : '');
 
             // Build EML (MIME) Format
             String emlContent = 'From: ' + fromAddr + '\r\n' +
@@ -182,7 +241,11 @@ public class EmailForwarder {
             // Use .eml extension so it opens as an email record
             String safeSubject = subject.replaceAll('[^a-zA-Z0-9]', '_');
             if (String.isBlank(safeSubject)) {
-                safeSubject = 'Email_' + emailId;
+                safeSubject = 'Email_' + String.valueOf(emailId).left(15);
+            }
+            // Limit filename length
+            if (safeSubject.length() > 50) {
+                safeSubject = safeSubject.left(50);
             }
             efa.setFileName(safeSubject + '.eml');
             efa.setBody(Blob.valueOf(emlContent));
@@ -210,13 +273,47 @@ public class EmailForwarder {
             if (!result.isSuccess()) {
                 String errorMsg = '';
                 for (Messaging.SendEmailError error : result.getErrors()) {
-                    errorMsg += error.getMessage() + ' (Code: ' + error.getStatusCode() + ') ';
+                    errorMsg += error.getMessage() + ' ';
                 }
-                throw new AuraHandledException('Failed to send email: ' + errorMsg);
+                throw new AuraHandledException('Failed to send email: ' + errorMsg.trim());
             }
         }
         
         return 'Success: ' + attachments.size() + ' email(s) forwarded to ' + recipientEmail;
+    }
+
+    /**
+     * Check field-level read access for EmailMessage fields
+     */
+    private static void checkFieldReadAccess() {
+        List<String> fieldsToCheck = new List<String>{
+            'Subject', 'FromAddress', 'ToAddress', 'MessageDate', 'Status', 'Incoming', 'HtmlBody', 'TextBody'
+        };
+        
+        Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.EmailMessage.fields.getMap();
+        
+        for (String fieldName : fieldsToCheck) {
+            Schema.SObjectField field = fieldMap.get(fieldName);
+            if (field != null && !field.getDescribe().isAccessible()) {
+                throw new AuraHandledException('You do not have permission to access the ' + fieldName + ' field.');
+            }
+        }
+    }
+
+    /**
+     * Validate email address format
+     * @param email The email address to validate
+     * @return Boolean indicating if email format is valid
+     */
+    private static Boolean isValidEmail(String email) {
+        if (String.isBlank(email)) {
+            return false;
+        }
+        // Simple email validation pattern
+        String emailRegex = '^[a-zA-Z0-9._|\\\\%#~`=?&/$^*!}{+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$';
+        Pattern emailPattern = Pattern.compile(emailRegex);
+        Matcher emailMatcher = emailPattern.matcher(email);
+        return emailMatcher.matches();
     }
 
     /**
@@ -235,7 +332,7 @@ public class EmailForwarder {
         
         public EmailMessageWrapper(EmailMessage em) {
             this.id = em.Id;
-            this.subject = em.Subject != null ? em.Subject : '(No Subject)';
+            this.subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
             this.fromAddress = em.FromAddress;
             this.toAddress = em.ToAddress;
             this.messageDate = em.MessageDate;
