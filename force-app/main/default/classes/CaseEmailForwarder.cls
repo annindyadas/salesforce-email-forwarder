@@ -13,7 +13,7 @@ public class CaseEmailForwarder {
         if (allEmailIds.isEmpty()) return;
 
         // Default recipient - can be configured
-        String recipientEmail = 'annindya.das@aig.com';
+        String recipientEmail = '';
         forwardEmailsToRecipient(new List<Id>(allEmailIds), recipientEmail);
     }
 
