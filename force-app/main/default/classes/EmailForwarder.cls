@@ -1,9 +1,9 @@
-public class CaseEmailForwarder {
+public class EmailForwarder {
 
     /**
      * Invocable method for Flow/Process Builder integration
      */
-    @InvocableMethod(label='Forward Emails as EML Attachments' category='Case')
+    @InvocableMethod(label='Forward Emails as EML Attachments' category='Email')
     public static void forwardEmails(List<List<Id>> emailIdBatches) {
         Set<Id> allEmailIds = new Set<Id>();
         for (List<Id> batch : emailIdBatches) {

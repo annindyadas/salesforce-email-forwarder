@@ -1,9 +1,9 @@
 import { LightningElement, api, track, wire } from 'lwc';
 import { CloseActionScreenEvent } from 'lightning/actions';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import getEmailsByRecordId from '@salesforce/apex/CaseEmailForwarder.getEmailsByRecordId';
-import forwardSelectedEmails from '@salesforce/apex/CaseEmailForwarder.forwardSelectedEmails';
-import getEmailsForDownload from '@salesforce/apex/CaseEmailForwarder.getEmailsForDownload';
+import getEmailsByRecordId from '@salesforce/apex/EmailForwarder.getEmailsByRecordId';
+import forwardSelectedEmails from '@salesforce/apex/EmailForwarder.forwardSelectedEmails';
+import getEmailsForDownload from '@salesforce/apex/EmailForwarder.getEmailsForDownload';
 
 const COLUMNS = [
     { 
