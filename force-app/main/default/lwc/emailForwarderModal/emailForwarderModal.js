@@ -68,6 +68,14 @@ export default class EmailForwarderModal extends LightningElement {
     @track isSending = false;
     @track isDownloading = false;
     
+    // Pagination properties
+    @track currentPage = 1;
+    @track pageSize = 50;
+    @track totalRecords = 0;
+    @track totalPages = 0;
+    @track hasNextPage = false;
+    @track hasPreviousPage = false;
+    
     // Recipient email - user must enter this
     @track recipientEmail = '';
     
@@ -95,7 +103,45 @@ export default class EmailForwarderModal extends LightningElement {
     }
     
     get totalCount() {
+        return this.totalRecords;
+    }
+    
+    get currentPageCount() {
         return this.emails.length;
+    }
+    
+    // Pagination info display
+    get paginationInfo() {
+        if (this.totalRecords === 0) return '';
+        const start = ((this.currentPage - 1) * this.pageSize) + 1;
+        const end = Math.min(this.currentPage * this.pageSize, this.totalRecords);
+        return `Showing ${start}-${end} of ${this.totalRecords}`;
+    }
+    
+    get showPagination() {
+        return this.totalPages > 1;
+    }
+    
+    get isFirstPage() {
+        return this.currentPage === 1;
+    }
+    
+    get isLastPage() {
+        return this.currentPage === this.totalPages;
+    }
+    
+    // Page size options for dropdown
+    get pageSizeOptions() {
+        return [
+            { label: '25', value: '25' },
+            { label: '50', value: '50' },
+            { label: '100', value: '100' },
+            { label: '200', value: '200' }
+        ];
+    }
+    
+    get pageSizeValue() {
+        return String(this.pageSize);
     }
     
     get sendButtonLabel() {
@@ -125,31 +171,72 @@ export default class EmailForwarderModal extends LightningElement {
     }
 
     get modalTitle() {
-        return `Forward Emails (${this.totalCount} available)`;
+        return `Forward Emails (${this.totalCount} total)`;
     }
 
-    // Imperative call to fetch fresh emails from server
+    // Imperative call to fetch fresh emails from server with pagination
     loadEmails() {
         this.isLoading = true;
         this.error = undefined;
         // Clear existing emails to prevent duplicates
         this.emails = [];
-        this.selectedEmailIds = [];
         
-        getEmailsByRecordId({ recordId: this._recordId })
-            .then(data => {
-                this.emails = data ? [...data] : [];
+        getEmailsByRecordId({ 
+            recordId: this._recordId,
+            pageSize: this.pageSize,
+            pageNumber: this.currentPage
+        })
+            .then(result => {
+                if (result) {
+                    this.emails = result.emails ? [...result.emails] : [];
+                    this.totalRecords = result.totalCount || 0;
+                    this.totalPages = result.totalPages || 0;
+                    this.hasNextPage = result.hasNextPage || false;
+                    this.hasPreviousPage = result.hasPreviousPage || false;
+                    this.currentPage = result.currentPage || 1;
+                }
                 this.error = undefined;
-                // Apply initial sorting
-                this.sortData(this.sortedBy, this.sortedDirection);
             })
             .catch(error => {
                 this.error = this.reduceErrors(error);
                 this.emails = [];
+                this.totalRecords = 0;
+                this.totalPages = 0;
             })
             .finally(() => {
                 this.isLoading = false;
             });
+    }
+    
+    // Pagination handlers
+    handleFirstPage() {
+        this.currentPage = 1;
+        this.loadEmails();
+    }
+    
+    handlePreviousPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.loadEmails();
+        }
+    }
+    
+    handleNextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this.loadEmails();
+        }
+    }
+    
+    handleLastPage() {
+        this.currentPage = this.totalPages;
+        this.loadEmails();
+    }
+    
+    handlePageSizeChange(event) {
+        this.pageSize = parseInt(event.detail.value, 10);
+        this.currentPage = 1; // Reset to first page when changing page size
+        this.loadEmails();
     }
 
     // Handle row selection in the datatable

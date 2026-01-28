@@ -40,3 +40,16 @@
 lightning-datatable {
     display: block;
 }
+
+/* Pagination Controls */
+.pagination-container {
+    padding: 0.75rem;
+    background-color: #f3f3f3;
+    border-radius: 0 0 4px 4px;
+    border: 1px solid #dddbda;
+    border-top: none;
+}
+
+.pagination-container lightning-combobox {
+    width: 80px;
+}

@@ -85,11 +85,13 @@ private class EmailForwarderTest {
         Case testCase = getTestCase();
         
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 50, 1);
         Test.stopTest();
         
         System.assertNotEquals(null, result, 'Result should not be null');
-        System.assertEquals(3, result.size(), 'Should return 3 emails');
+        System.assertEquals(3, result.totalCount, 'Should return 3 emails total');
+        System.assertEquals(3, result.emails.size(), 'Should return 3 emails on first page');
+        System.assertEquals(1, result.currentPage, 'Should be on page 1');
     }
     
     /**
@@ -99,11 +101,12 @@ private class EmailForwarderTest {
     @isTest
     static void testGetEmailsByRecordId_NullId() {
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(null);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(null, 50, 1);
         Test.stopTest();
         
         System.assertNotEquals(null, result, 'Result should not be null');
-        System.assertEquals(0, result.size(), 'Should return empty list for null Id');
+        System.assertEquals(0, result.totalCount, 'Should return 0 total for null Id');
+        System.assertEquals(0, result.emails.size(), 'Should return empty list for null Id');
     }
     
     /**
@@ -113,7 +116,7 @@ private class EmailForwarderTest {
     static void testGetEmailsByRecordId_InvalidId() {
         Test.startTest();
         try {
-            EmailForwarder.getEmailsByRecordId('invalid-id-format');
+            EmailForwarder.getEmailsByRecordId('invalid-id-format', 50, 1);
             System.assert(false, 'Should have thrown an exception');
         } catch (Exception e) {
             System.assert(true, 'Exception was thrown as expected');
@@ -134,11 +137,12 @@ private class EmailForwarderTest {
         insert emptyCase;
         
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(emptyCase.Id);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(emptyCase.Id, 50, 1);
         Test.stopTest();
         
         System.assertNotEquals(null, result, 'Result should not be null');
-        System.assertEquals(0, result.size(), 'Should return 0 emails');
+        System.assertEquals(0, result.totalCount, 'Should return 0 emails');
+        System.assertEquals(0, result.emails.size(), 'Should return empty email list');
     }
     
     /**
@@ -317,11 +321,11 @@ private class EmailForwarderTest {
         Case testCase = getTestCase();
         
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> wrappers = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 50, 1);
         Test.stopTest();
         
         // Verify wrapper has all expected properties
-        EmailForwarder.EmailMessageWrapper wrapper = wrappers[0];
+        EmailForwarder.EmailMessageWrapper wrapper = result.emails[0];
         System.assertNotEquals(null, wrapper.id, 'Id should not be null');
         System.assertNotEquals(null, wrapper.fromAddress, 'From address should not be null');
         System.assertNotEquals(null, wrapper.toAddress, 'To address should not be null');
@@ -410,10 +414,11 @@ private class EmailForwarderTest {
         
         Test.startTest();
         // This should not throw an exception for admin user
-        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 50, 1);
         Test.stopTest();
         
         System.assertNotEquals(null, result, 'Should have read access to EmailMessage');
+        System.assertNotEquals(null, result.emails, 'Should return emails');
     }
     
     /**
@@ -424,11 +429,11 @@ private class EmailForwarderTest {
         Case testCase = getTestCase();
         
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> wrappers = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 50, 1);
         Test.stopTest();
         
         // Verify only expected fields are exposed
-        EmailForwarder.EmailMessageWrapper wrapper = wrappers[0];
+        EmailForwarder.EmailMessageWrapper wrapper = result.emails[0];
         
         // Verify the wrapper properties are properly set
         System.assertNotEquals(null, wrapper.id, 'Id should be accessible');
@@ -502,18 +507,72 @@ private class EmailForwarderTest {
     }
     
     /**
-     * @description Test that LIMIT is respected for large datasets
+     * @description Test pagination with page size limits
      */
     @isTest
-    static void testQueryLimits() {
+    static void testPagination_PageSize() {
         Case testCase = getTestCase();
         
-        // The query has LIMIT 1000, verify it doesn't fail
         Test.startTest();
-        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        // Request page size of 2, should get 2 emails on first page
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 2, 1);
         Test.stopTest();
         
-        // Just verify the query executed successfully
-        System.assert(result.size() <= 1000, 'Should respect query limit');
+        System.assertEquals(2, result.emails.size(), 'Should return 2 emails per page');
+        System.assertEquals(3, result.totalCount, 'Total count should be 3');
+        System.assertEquals(2, result.totalPages, 'Should have 2 pages');
+        System.assertEquals(true, result.hasNextPage, 'Should have next page');
+        System.assertEquals(false, result.hasPreviousPage, 'Should not have previous page');
+    }
+    
+    /**
+     * @description Test pagination second page
+     */
+    @isTest
+    static void testPagination_SecondPage() {
+        Case testCase = getTestCase();
+        
+        Test.startTest();
+        // Request second page with page size of 2
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 2, 2);
+        Test.stopTest();
+        
+        System.assertEquals(1, result.emails.size(), 'Should return 1 email on second page');
+        System.assertEquals(2, result.currentPage, 'Should be on page 2');
+        System.assertEquals(false, result.hasNextPage, 'Should not have next page');
+        System.assertEquals(true, result.hasPreviousPage, 'Should have previous page');
+    }
+    
+    /**
+     * @description Test pagination with default values
+     */
+    @isTest
+    static void testPagination_DefaultValues() {
+        Case testCase = getTestCase();
+        
+        Test.startTest();
+        // Pass null for page size and page number to test defaults
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, null, null);
+        Test.stopTest();
+        
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertEquals(1, result.currentPage, 'Should default to page 1');
+        System.assertEquals(50, result.pageSize, 'Should default to page size 50');
+    }
+    
+    /**
+     * @description Test pagination with max page size
+     */
+    @isTest
+    static void testPagination_MaxPageSize() {
+        Case testCase = getTestCase();
+        
+        Test.startTest();
+        // Request page size larger than max (200)
+        EmailForwarder.PaginatedEmailResult result = EmailForwarder.getEmailsByRecordId(testCase.Id, 500, 1);
+        Test.stopTest();
+        
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertEquals(200, result.pageSize, 'Should cap at max page size of 200');
     }
 }
