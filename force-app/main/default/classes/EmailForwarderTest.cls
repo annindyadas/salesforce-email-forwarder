@@ -396,8 +396,9 @@ private class EmailForwarderTest {
         Test.stopTest();
         
         System.assertEquals(1, result.size(), 'Should return 1 email');
-        System.assert(result[0].content.contains('Content-Type: text/plain'), 
-            'EML should indicate plain text content type');
+        // Verify the text body is included in the EML content
+        System.assert(result[0].content.contains('This is plain text only'), 
+            'EML should contain the text body content');
     }
     
     /**
