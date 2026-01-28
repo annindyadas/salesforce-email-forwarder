@@ -56,6 +56,9 @@ export default class EmailForwarderModal extends LightningElement {
     @track isSending = false;
     @track isDownloading = false;
     
+    // Flag to prevent duplicate loading
+    isInitialized = false;
+    
     // Recipient email - user must enter this
     @track recipientEmail = '';
     
@@ -118,17 +121,24 @@ export default class EmailForwarderModal extends LightningElement {
 
     // Lifecycle hook - called when component is inserted into the DOM
     connectedCallback() {
-        this.loadEmails();
+        // Prevent duplicate loading if already initialized
+        if (!this.isInitialized) {
+            this.isInitialized = true;
+            this.loadEmails();
+        }
     }
 
     // Imperative call to fetch fresh emails from server
     loadEmails() {
         this.isLoading = true;
         this.error = undefined;
+        // Clear existing emails to prevent duplicates
+        this.emails = [];
+        this.selectedEmailIds = [];
         
         getEmailsByRecordId({ recordId: this.recordId })
             .then(data => {
-                this.emails = [...data];
+                this.emails = data ? [...data] : [];
                 this.error = undefined;
                 // Apply initial sorting
                 this.sortData(this.sortedBy, this.sortedDirection);
