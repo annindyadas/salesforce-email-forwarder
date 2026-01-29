@@ -21,6 +21,13 @@ This feature provides a user-friendly modal interface that displays all emails a
 - **Error Handling** - Comprehensive error messages and validation
 - **AppExchange Ready** - Follows Salesforce security best practices including CRUD/FLS enforcement and `with sharing` keyword
 
+### 📎 Attachment Support
+
+- **Forward with Attachments** - All original email attachments (ContentDocumentLinks and Attachments) are automatically included when forwarding emails
+- **Download with Attachments** - When downloading emails as a ZIP file, all attachments are bundled together with the `.eml` files
+- **Preserved File Names** - Original attachment filenames are preserved for easy identification
+- **Multiple Attachment Types** - Supports all file types including documents, images, PDFs, and more
+
 ## 🏗️ Components
 
 ### Apex Classes
