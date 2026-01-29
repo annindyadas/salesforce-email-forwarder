@@ -10,11 +10,7 @@
  */
 public with sharing class EmailForwarder {
 
-    // Default page size for pagination
-    private static final Integer DEFAULT_PAGE_SIZE = 50;
-    // Maximum page size allowed
-    private static final Integer MAX_PAGE_SIZE = 200;
-    // Maximum emails for download/forward operations
+    // Maximum number of emails to query/process
     private static final Integer MAX_EMAILS = 1000;
 
     /**
@@ -46,16 +42,12 @@ public with sharing class EmailForwarder {
     }
 
     /**
-     * Retrieves EmailMessages with pagination support
+     * Retrieves all EmailMessages related to a specific record
      * Enforces CRUD/FLS security checks
      * Note: Not cacheable to ensure fresh data on each call
-     * @param recordId - The parent record Id
-     * @param pageSize - Number of records per page (default 50, max 200)
-     * @param pageNumber - Page number to retrieve (1-based)
-     * @return PaginatedEmailResult containing emails and pagination info
      */
     @AuraEnabled
-    public static PaginatedEmailResult getEmailsByRecordId(Id recordId, Integer pageSize, Integer pageNumber) {
+    public static List<EmailMessageWrapper> getEmailsByRecordId(Id recordId) {
         try {
             // Check if user has read access to EmailMessage object
             if (!Schema.sObjectType.EmailMessage.isAccessible()) {
@@ -65,49 +57,23 @@ public with sharing class EmailForwarder {
             // Check field-level security for each field we're querying
             checkFieldReadAccess();
             
-            // Validate and set defaults for pagination parameters
-            if (pageSize == null || pageSize <= 0) {
-                pageSize = DEFAULT_PAGE_SIZE;
-            }
-            if (pageSize > MAX_PAGE_SIZE) {
-                pageSize = MAX_PAGE_SIZE;
-            }
-            if (pageNumber == null || pageNumber <= 0) {
-                pageNumber = 1;
-            }
+            List<EmailMessageWrapper> wrapperList = new List<EmailMessageWrapper>();
             
-            // Calculate offset
-            Integer offset = (pageNumber - 1) * pageSize;
-            
-            // Get total count
-            Integer totalCount = [
-                SELECT COUNT() 
-                FROM EmailMessage 
-                WHERE RelatedToId = :recordId
-                WITH SECURITY_ENFORCED
-            ];
-            
-            // Query EmailMessages with pagination
+            // Query EmailMessages where the RelatedToId matches the record
             List<EmailMessage> emails = [
                 SELECT Id, Subject, FromAddress, ToAddress, MessageDate, Status, Incoming
                 FROM EmailMessage 
                 WHERE RelatedToId = :recordId
                 WITH SECURITY_ENFORCED
                 ORDER BY MessageDate DESC
-                LIMIT :pageSize
-                OFFSET :offset
+                LIMIT :MAX_EMAILS
             ];
             
-            List<EmailMessageWrapper> wrapperList = new List<EmailMessageWrapper>();
             for (EmailMessage em : emails) {
                 wrapperList.add(new EmailMessageWrapper(em));
             }
             
-            // Calculate total pages
-            Integer totalPages = (Integer)Math.ceil((Decimal)totalCount / pageSize);
-            
-            return new PaginatedEmailResult(wrapperList, totalCount, pageNumber, pageSize, totalPages);
-            
+            return wrapperList;
         } catch (System.QueryException qe) {
             // Handle SECURITY_ENFORCED exceptions
             throw new AuraHandledException('You do not have permission to access one or more email fields.');
@@ -115,29 +81,6 @@ public with sharing class EmailForwarder {
             throw e;
         } catch (Exception e) {
             throw new AuraHandledException('Error retrieving emails: ' + e.getMessage());
-        }
-    }
-    
-    /**
-     * Wrapper class for paginated results
-     */
-    public class PaginatedEmailResult {
-        @AuraEnabled public List<EmailMessageWrapper> emails { get; set; }
-        @AuraEnabled public Integer totalCount { get; set; }
-        @AuraEnabled public Integer currentPage { get; set; }
-        @AuraEnabled public Integer pageSize { get; set; }
-        @AuraEnabled public Integer totalPages { get; set; }
-        @AuraEnabled public Boolean hasNextPage { get; set; }
-        @AuraEnabled public Boolean hasPreviousPage { get; set; }
-        
-        public PaginatedEmailResult(List<EmailMessageWrapper> emails, Integer totalCount, Integer currentPage, Integer pageSize, Integer totalPages) {
-            this.emails = emails;
-            this.totalCount = totalCount;
-            this.currentPage = currentPage;
-            this.pageSize = pageSize;
-            this.totalPages = totalPages;
-            this.hasNextPage = currentPage < totalPages;
-            this.hasPreviousPage = currentPage > 1;
         }
     }
 

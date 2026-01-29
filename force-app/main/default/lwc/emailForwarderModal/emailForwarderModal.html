@@ -64,67 +64,6 @@
                             onrowselection={handleRowSelection}>
                         </lightning-datatable>
                     </div>
-                    
-                    <!-- Pagination Controls -->
-                    <template lwc:if={showPagination}>
-                        <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-top_medium pagination-container">
-                            <!-- Page Size Selector -->
-                            <div class="slds-col">
-                                <div class="slds-form-element slds-form-element_horizontal">
-                                    <label class="slds-form-element__label" for="pageSize">Rows per page:</label>
-                                    <div class="slds-form-element__control">
-                                        <lightning-combobox
-                                            name="pageSize"
-                                            value={pageSizeValue}
-                                            options={pageSizeOptions}
-                                            onchange={handlePageSizeChange}
-                                            variant="label-hidden"
-                                            dropdown-alignment="auto">
-                                        </lightning-combobox>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Pagination Info -->
-                            <div class="slds-col slds-text-align_center">
-                                <span class="slds-text-body_regular">{paginationInfo}</span>
-                            </div>
-                            
-                            <!-- Navigation Buttons -->
-                            <div class="slds-col">
-                                <lightning-button-group>
-                                    <lightning-button-icon
-                                        icon-name="utility:chevronleft"
-                                        alternative-text="First Page"
-                                        title="First Page"
-                                        onclick={handleFirstPage}
-                                        disabled={isFirstPage}>
-                                    </lightning-button-icon>
-                                    <lightning-button-icon
-                                        icon-name="utility:left"
-                                        alternative-text="Previous Page"
-                                        title="Previous Page"
-                                        onclick={handlePreviousPage}
-                                        disabled={isFirstPage}>
-                                    </lightning-button-icon>
-                                    <lightning-button-icon
-                                        icon-name="utility:right"
-                                        alternative-text="Next Page"
-                                        title="Next Page"
-                                        onclick={handleNextPage}
-                                        disabled={isLastPage}>
-                                    </lightning-button-icon>
-                                    <lightning-button-icon
-                                        icon-name="utility:chevronright"
-                                        alternative-text="Last Page"
-                                        title="Last Page"
-                                        onclick={handleLastPage}
-                                        disabled={isLastPage}>
-                                    </lightning-button-icon>
-                                </lightning-button-group>
-                            </div>
-                        </div>
-                    </template>
                 </template>
             </template>
         </div>

@@ -68,14 +68,6 @@ export default class EmailForwarderModal extends LightningElement {
     @track isSending = false;
     @track isDownloading = false;
     
-    // Pagination properties
-    @track currentPage = 1;
-    @track pageSize = 50;
-    @track totalRecords = 0;
-    @track totalPages = 0;
-    @track hasNextPage = false;
-    @track hasPreviousPage = false;
-    
     // Recipient email - user must enter this
     @track recipientEmail = '';
     
@@ -103,45 +95,7 @@ export default class EmailForwarderModal extends LightningElement {
     }
     
     get totalCount() {
-        return this.totalRecords;
-    }
-    
-    get currentPageCount() {
         return this.emails.length;
-    }
-    
-    // Pagination info display
-    get paginationInfo() {
-        if (this.totalRecords === 0) return '';
-        const start = ((this.currentPage - 1) * this.pageSize) + 1;
-        const end = Math.min(this.currentPage * this.pageSize, this.totalRecords);
-        return `Showing ${start}-${end} of ${this.totalRecords}`;
-    }
-    
-    get showPagination() {
-        return this.totalPages > 1;
-    }
-    
-    get isFirstPage() {
-        return this.currentPage === 1;
-    }
-    
-    get isLastPage() {
-        return this.currentPage === this.totalPages;
-    }
-    
-    // Page size options for dropdown
-    get pageSizeOptions() {
-        return [
-            { label: '25', value: '25' },
-            { label: '50', value: '50' },
-            { label: '100', value: '100' },
-            { label: '200', value: '200' }
-        ];
-    }
-    
-    get pageSizeValue() {
-        return String(this.pageSize);
     }
     
     get sendButtonLabel() {
@@ -171,72 +125,31 @@ export default class EmailForwarderModal extends LightningElement {
     }
 
     get modalTitle() {
-        return `Forward Emails (${this.totalCount} total)`;
+        return `Forward Emails (${this.totalCount} available)`;
     }
 
-    // Imperative call to fetch fresh emails from server with pagination
+    // Imperative call to fetch fresh emails from server
     loadEmails() {
         this.isLoading = true;
         this.error = undefined;
         // Clear existing emails to prevent duplicates
         this.emails = [];
+        this.selectedEmailIds = [];
         
-        getEmailsByRecordId({ 
-            recordId: this._recordId,
-            pageSize: this.pageSize,
-            pageNumber: this.currentPage
-        })
-            .then(result => {
-                if (result) {
-                    this.emails = result.emails ? [...result.emails] : [];
-                    this.totalRecords = result.totalCount || 0;
-                    this.totalPages = result.totalPages || 0;
-                    this.hasNextPage = result.hasNextPage || false;
-                    this.hasPreviousPage = result.hasPreviousPage || false;
-                    this.currentPage = result.currentPage || 1;
-                }
+        getEmailsByRecordId({ recordId: this._recordId })
+            .then(data => {
+                this.emails = data ? [...data] : [];
                 this.error = undefined;
+                // Apply initial sorting
+                this.sortData(this.sortedBy, this.sortedDirection);
             })
             .catch(error => {
                 this.error = this.reduceErrors(error);
                 this.emails = [];
-                this.totalRecords = 0;
-                this.totalPages = 0;
             })
             .finally(() => {
                 this.isLoading = false;
             });
-    }
-    
-    // Pagination handlers
-    handleFirstPage() {
-        this.currentPage = 1;
-        this.loadEmails();
-    }
-    
-    handlePreviousPage() {
-        if (this.currentPage > 1) {
-            this.currentPage--;
-            this.loadEmails();
-        }
-    }
-    
-    handleNextPage() {
-        if (this.currentPage < this.totalPages) {
-            this.currentPage++;
-            this.loadEmails();
-        }
-    }
-    
-    handleLastPage() {
-        this.currentPage = this.totalPages;
-        this.loadEmails();
-    }
-    
-    handlePageSizeChange(event) {
-        this.pageSize = parseInt(event.detail.value, 10);
-        this.currentPage = 1; // Reset to first page when changing page size
-        this.loadEmails();
     }
 
     // Handle row selection in the datatable
@@ -306,7 +219,7 @@ export default class EmailForwarderModal extends LightningElement {
         }
     }
 
-    // Handle the Download button click
+    // Handle the Download button click - downloads selected emails as ZIP
     async handleDownload() {
         if (!this.hasSelectedEmails) {
             this.showToast('Warning', 'Please select at least one email to download.', 'warning');
@@ -316,22 +229,29 @@ export default class EmailForwarderModal extends LightningElement {
         this.isDownloading = true;
 
         try {
-            // Get email contents from Apex
-            const emailContents = await getEmailsForDownload({ emailIds: this.selectedEmailIds });
+            // Get email contents from server
+            const emailContents = await getEmailsForDownload({ 
+                emailIds: this.selectedEmailIds 
+            });
             
-            // Create ZIP file using pure JavaScript
-            const zipBlob = this.createZipFile(emailContents);
+            if (!emailContents || emailContents.length === 0) {
+                this.showToast('Warning', 'No email content available for download.', 'warning');
+                return;
+            }
+
+            // Create ZIP file
+            const zipBlob = await this.createZipFile(emailContents);
             
-            // Create download link
+            // Download the ZIP file
             const downloadLink = document.createElement('a');
             downloadLink.href = URL.createObjectURL(zipBlob);
-            downloadLink.download = 'emails_' + new Date().getTime() + '.zip';
+            downloadLink.download = `emails_${new Date().toISOString().slice(0,10)}.zip`;
             document.body.appendChild(downloadLink);
             downloadLink.click();
             document.body.removeChild(downloadLink);
             URL.revokeObjectURL(downloadLink.href);
             
-            this.showToast('Success', `${this.selectedCount} email(s) downloaded successfully.`, 'success');
+            this.showToast('Success', `Downloaded ${emailContents.length} email(s) as ZIP`, 'success');
         } catch (error) {
             this.showToast('Error', this.reduceErrors(error), 'error');
         } finally {
@@ -339,113 +259,116 @@ export default class EmailForwarderModal extends LightningElement {
         }
     }
 
-    /**
-     * Creates a ZIP file from an array of files using pure JavaScript
-     * ZIP format specification: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-     * @param {Array} files - Array of {fileName, content} objects
-     * @returns {Blob} - ZIP file as a Blob
-     */
-    createZipFile(files) {
-        const encoder = new TextEncoder();
+    // Create a ZIP file from email contents (pure JavaScript, no external libraries)
+    async createZipFile(emailContents) {
+        const files = emailContents.map(email => ({
+            name: email.fileName,
+            content: email.content
+        }));
+
+        // Simple ZIP file creation
+        const zipParts = [];
         const centralDirectory = [];
-        const fileDataParts = [];
         let offset = 0;
 
         for (const file of files) {
-            const fileName = file.fileName;
-            const fileContent = file.content;
-            const fileNameBytes = encoder.encode(fileName);
-            const fileContentBytes = encoder.encode(fileContent);
+            const encoder = new TextEncoder();
+            const fileData = encoder.encode(file.content);
+            const fileName = encoder.encode(file.name);
             
-            // Calculate CRC32
-            const crc = this.crc32(fileContentBytes);
+            // Local file header
+            const localHeader = new Uint8Array(30 + fileName.length);
+            const view = new DataView(localHeader.buffer);
             
-            // Local file header (30 bytes + fileName length)
-            const localHeader = new Uint8Array(30 + fileNameBytes.length);
-            const localView = new DataView(localHeader.buffer);
+            view.setUint32(0, 0x04034b50, true); // Local file header signature
+            view.setUint16(4, 20, true); // Version needed
+            view.setUint16(6, 0, true); // General purpose bit flag
+            view.setUint16(8, 0, true); // Compression method (store)
+            view.setUint16(10, 0, true); // File last mod time
+            view.setUint16(12, 0, true); // File last mod date
+            view.setUint32(14, this.crc32(fileData), true); // CRC-32
+            view.setUint32(18, fileData.length, true); // Compressed size
+            view.setUint32(22, fileData.length, true); // Uncompressed size
+            view.setUint16(26, fileName.length, true); // File name length
+            view.setUint16(28, 0, true); // Extra field length
+            localHeader.set(fileName, 30);
             
-            localView.setUint32(0, 0x04034b50, true);  // Local file header signature
-            localView.setUint16(4, 20, true);          // Version needed to extract (2.0)
-            localView.setUint16(6, 0, true);           // General purpose bit flag
-            localView.setUint16(8, 0, true);           // Compression method (0 = stored)
-            localView.setUint16(10, 0, true);          // File last modification time
-            localView.setUint16(12, 0, true);          // File last modification date
-            localView.setUint32(14, crc, true);        // CRC-32
-            localView.setUint32(18, fileContentBytes.length, true);  // Compressed size
-            localView.setUint32(22, fileContentBytes.length, true);  // Uncompressed size
-            localView.setUint16(26, fileNameBytes.length, true);     // File name length
-            localView.setUint16(28, 0, true);          // Extra field length
+            zipParts.push(localHeader);
+            zipParts.push(fileData);
             
-            // Add file name to local header
-            localHeader.set(fileNameBytes, 30);
+            // Central directory entry
+            const centralEntry = new Uint8Array(46 + fileName.length);
+            const centralView = new DataView(centralEntry.buffer);
             
-            // Store local header offset for central directory
-            const localHeaderOffset = offset;
+            centralView.setUint32(0, 0x02014b50, true); // Central directory signature
+            centralView.setUint16(4, 20, true); // Version made by
+            centralView.setUint16(6, 20, true); // Version needed
+            centralView.setUint16(8, 0, true); // General purpose bit flag
+            centralView.setUint16(10, 0, true); // Compression method
+            centralView.setUint16(12, 0, true); // File last mod time
+            centralView.setUint16(14, 0, true); // File last mod date
+            centralView.setUint32(16, this.crc32(fileData), true); // CRC-32
+            centralView.setUint32(20, fileData.length, true); // Compressed size
+            centralView.setUint32(24, fileData.length, true); // Uncompressed size
+            centralView.setUint16(28, fileName.length, true); // File name length
+            centralView.setUint16(30, 0, true); // Extra field length
+            centralView.setUint16(32, 0, true); // File comment length
+            centralView.setUint16(34, 0, true); // Disk number start
+            centralView.setUint16(36, 0, true); // Internal file attributes
+            centralView.setUint32(38, 0, true); // External file attributes
+            centralView.setUint32(42, offset, true); // Relative offset of local header
+            centralEntry.set(fileName, 46);
             
-            // Add local header and file content to file data
-            fileDataParts.push(localHeader);
-            fileDataParts.push(fileContentBytes);
-            offset += localHeader.length + fileContentBytes.length;
-            
-            // Central directory file header (46 bytes + fileName length)
-            const centralHeader = new Uint8Array(46 + fileNameBytes.length);
-            const centralView = new DataView(centralHeader.buffer);
-            
-            centralView.setUint32(0, 0x02014b50, true);   // Central directory signature
-            centralView.setUint16(4, 20, true);            // Version made by
-            centralView.setUint16(6, 20, true);            // Version needed to extract
-            centralView.setUint16(8, 0, true);             // General purpose bit flag
-            centralView.setUint16(10, 0, true);            // Compression method
-            centralView.setUint16(12, 0, true);            // File last modification time
-            centralView.setUint16(14, 0, true);            // File last modification date
-            centralView.setUint32(16, crc, true);          // CRC-32
-            centralView.setUint32(20, fileContentBytes.length, true);  // Compressed size
-            centralView.setUint32(24, fileContentBytes.length, true);  // Uncompressed size
-            centralView.setUint16(28, fileNameBytes.length, true);     // File name length
-            centralView.setUint16(30, 0, true);            // Extra field length
-            centralView.setUint16(32, 0, true);            // File comment length
-            centralView.setUint16(34, 0, true);            // Disk number start
-            centralView.setUint16(36, 0, true);            // Internal file attributes
-            centralView.setUint32(38, 0, true);            // External file attributes
-            centralView.setUint32(42, localHeaderOffset, true);  // Relative offset of local header
-            
-            // Add file name to central header
-            centralHeader.set(fileNameBytes, 46);
-            centralDirectory.push(centralHeader);
+            centralDirectory.push(centralEntry);
+            offset += localHeader.length + fileData.length;
         }
-        
+
         // Calculate central directory size
-        const centralDirectoryOffset = offset;
-        let centralDirectorySize = 0;
-        for (const header of centralDirectory) {
-            centralDirectorySize += header.length;
+        let centralDirSize = 0;
+        for (const entry of centralDirectory) {
+            centralDirSize += entry.length;
         }
-        
-        // End of central directory record (22 bytes)
+
+        // End of central directory
         const endOfCentralDir = new Uint8Array(22);
         const endView = new DataView(endOfCentralDir.buffer);
         
-        endView.setUint32(0, 0x06054b50, true);           // End of central directory signature
-        endView.setUint16(4, 0, true);                     // Number of this disk
-        endView.setUint16(6, 0, true);                     // Disk where central directory starts
-        endView.setUint16(8, files.length, true);          // Number of central directory records on this disk
-        endView.setUint16(10, files.length, true);         // Total number of central directory records
-        endView.setUint32(12, centralDirectorySize, true); // Size of central directory
-        endView.setUint32(16, centralDirectoryOffset, true); // Offset of start of central directory
-        endView.setUint16(20, 0, true);                    // Comment length
+        endView.setUint32(0, 0x06054b50, true); // End of central directory signature
+        endView.setUint16(4, 0, true); // Number of this disk
+        endView.setUint16(6, 0, true); // Disk where central directory starts
+        endView.setUint16(8, files.length, true); // Number of central directory records on this disk
+        endView.setUint16(10, files.length, true); // Total number of central directory records
+        endView.setUint32(12, centralDirSize, true); // Size of central directory
+        endView.setUint32(16, offset, true); // Offset of start of central directory
+        endView.setUint16(20, 0, true); // Comment length
+
+        // Combine all parts
+        const allParts = [...zipParts, ...centralDirectory, endOfCentralDir];
+        const totalLength = allParts.reduce((sum, part) => sum + part.length, 0);
+        const zipData = new Uint8Array(totalLength);
         
-        // Combine all parts into final ZIP blob
-        const allParts = [...fileDataParts, ...centralDirectory, endOfCentralDir];
-        return new Blob(allParts, { type: 'application/zip' });
+        let position = 0;
+        for (const part of allParts) {
+            zipData.set(part, position);
+            position += part.length;
+        }
+
+        return new Blob([zipData], { type: 'application/zip' });
     }
 
-    /**
-     * Calculate CRC32 checksum for data integrity
-     * @param {Uint8Array} data - The data to calculate CRC32 for
-     * @returns {number} - CRC32 value
-     */
+    // CRC-32 calculation for ZIP file
     crc32(data) {
-        // CRC32 lookup table
+        let crc = 0xFFFFFFFF;
+        const table = this.getCrc32Table();
+        
+        for (let i = 0; i < data.length; i++) {
+            crc = (crc >>> 8) ^ table[(crc ^ data[i]) & 0xFF];
+        }
+        
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    getCrc32Table() {
         if (!this._crc32Table) {
             this._crc32Table = new Uint32Array(256);
             for (let i = 0; i < 256; i++) {
@@ -456,60 +379,44 @@ export default class EmailForwarderModal extends LightningElement {
                 this._crc32Table[i] = c;
             }
         }
-        
-        let crc = 0xFFFFFFFF;
-        for (let i = 0; i < data.length; i++) {
-            crc = this._crc32Table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
-        }
-        return (crc ^ 0xFFFFFFFF) >>> 0;
+        return this._crc32Table;
     }
 
     // Handle the Close button click
     handleClose() {
-        // Dispatch close event for action screen
         this.dispatchEvent(new CloseActionScreenEvent());
     }
 
-    // Show toast notification
+    // Show toast message
     showToast(title, message, variant) {
         this.dispatchEvent(
             new ShowToastEvent({
                 title: title,
                 message: message,
-                variant: variant,
-                mode: 'dismissable'
+                variant: variant
             })
         );
     }
 
     // Reduce errors to a readable string
-    reduceErrors(errors) {
-        if (!Array.isArray(errors)) {
-            errors = [errors];
+    reduceErrors(error) {
+        if (typeof error === 'string') {
+            return error;
         }
-
-        return errors
-            .filter(error => !!error)
-            .map(error => {
-                if (typeof error === 'string') {
-                    return error;
-                }
-                if (error.body) {
-                    if (typeof error.body.message === 'string') {
-                        return error.body.message;
-                    }
-                    if (error.body.fieldErrors) {
-                        return Object.values(error.body.fieldErrors)
-                            .flat()
-                            .map(e => e.message)
-                            .join(', ');
-                    }
-                }
-                if (error.message) {
-                    return error.message;
-                }
-                return JSON.stringify(error);
-            })
-            .join(', ');
+        if (error.body) {
+            if (typeof error.body.message === 'string') {
+                return error.body.message;
+            }
+            if (error.body.fieldErrors) {
+                return Object.values(error.body.fieldErrors)
+                    .flat()
+                    .map(e => e.message)
+                    .join(', ');
+            }
+        }
+        if (error.message) {
+            return error.message;
+        }
+        return 'Unknown error';
     }
 }
