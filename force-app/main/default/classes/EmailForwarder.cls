@@ -1,17 +1,27 @@
 /**
  * EmailForwarder - Apex controller for Email Forwarder LWC
  * Handles retrieving and forwarding emails as EML attachments
+ * Supports email attachments through ContentDocumentLink
  * 
  * Security: Uses 'with sharing' to enforce record-level security
  * All SOQL queries check CRUD/FLS permissions before execution
  * 
  * @author Annindya Das
- * @version 1.0
+ * @version 2.0 - Added attachment support
  */
 public with sharing class EmailForwarder {
 
     // Maximum number of emails to query/process
     private static final Integer MAX_EMAILS = 1000;
+    
+    // Maximum attachment size in bytes (10MB per attachment)
+    private static final Integer MAX_ATTACHMENT_SIZE = 10485760;
+    
+    // Maximum total attachments size (25MB for email)
+    private static final Integer MAX_TOTAL_ATTACHMENT_SIZE = 26214400;
+    
+    // MIME boundary for multipart messages
+    private static final String BOUNDARY = '----=_Part_' + String.valueOf(DateTime.now().getTime());
 
     /**
      * Forwards selected emails to the specified recipient
@@ -69,8 +79,18 @@ public with sharing class EmailForwarder {
                 LIMIT :MAX_EMAILS
             ];
             
+            // Get attachment counts for each email
+            Set<Id> emailIds = new Set<Id>();
             for (EmailMessage em : emails) {
-                wrapperList.add(new EmailMessageWrapper(em));
+                emailIds.add(em.Id);
+            }
+            
+            Map<Id, Integer> attachmentCounts = getAttachmentCounts(emailIds);
+            
+            for (EmailMessage em : emails) {
+                EmailMessageWrapper wrapper = new EmailMessageWrapper(em);
+                wrapper.attachmentCount = attachmentCounts.containsKey(em.Id) ? attachmentCounts.get(em.Id) : 0;
+                wrapperList.add(wrapper);
             }
             
             return wrapperList;
@@ -83,10 +103,155 @@ public with sharing class EmailForwarder {
             throw new AuraHandledException('Error retrieving emails: ' + e.getMessage());
         }
     }
+    
+    /**
+     * Get attachment counts for a set of email IDs
+     */
+    private static Map<Id, Integer> getAttachmentCounts(Set<Id> emailIds) {
+        Map<Id, Integer> counts = new Map<Id, Integer>();
+        
+        if (emailIds.isEmpty()) {
+            return counts;
+        }
+        
+        // Check if user has access to ContentDocumentLink
+        if (!Schema.sObjectType.ContentDocumentLink.isAccessible()) {
+            return counts;
+        }
+        
+        // Query ContentDocumentLinks for email attachments
+        List<ContentDocumentLink> cdls = [
+            SELECT LinkedEntityId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId IN :emailIds
+            WITH SECURITY_ENFORCED
+        ];
+        
+        for (ContentDocumentLink cdl : cdls) {
+            Integer currentCount = counts.containsKey(cdl.LinkedEntityId) ? counts.get(cdl.LinkedEntityId) : 0;
+            counts.put(cdl.LinkedEntityId, currentCount + 1);
+        }
+        
+        return counts;
+    }
+    
+    /**
+     * Get attachments for a set of email IDs
+     * Returns a map of EmailMessage Id to list of AttachmentWrapper
+     */
+    private static Map<Id, List<AttachmentWrapper>> getEmailAttachments(Set<Id> emailIds) {
+        Map<Id, List<AttachmentWrapper>> attachmentMap = new Map<Id, List<AttachmentWrapper>>();
+        
+        if (emailIds.isEmpty()) {
+            return attachmentMap;
+        }
+        
+        // Initialize map with empty lists
+        for (Id emailId : emailIds) {
+            attachmentMap.put(emailId, new List<AttachmentWrapper>());
+        }
+        
+        // Check if user has access to ContentDocumentLink and ContentVersion
+        if (!Schema.sObjectType.ContentDocumentLink.isAccessible() ||
+            !Schema.sObjectType.ContentVersion.isAccessible()) {
+            return attachmentMap;
+        }
+        
+        // Query ContentDocumentLinks for email attachments
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId, LinkedEntityId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId IN :emailIds
+            WITH SECURITY_ENFORCED
+        ];
+        
+        if (cdls.isEmpty()) {
+            return attachmentMap;
+        }
+        
+        // Get Content Document IDs
+        Set<Id> contentDocIds = new Set<Id>();
+        Map<Id, Id> docToEmailMap = new Map<Id, Id>();
+        
+        for (ContentDocumentLink cdl : cdls) {
+            contentDocIds.add(cdl.ContentDocumentId);
+            docToEmailMap.put(cdl.ContentDocumentId, cdl.LinkedEntityId);
+        }
+        
+        // Query ContentVersion for file content
+        List<ContentVersion> versions = [
+            SELECT ContentDocumentId, Title, FileExtension, VersionData, ContentSize, FileType
+            FROM ContentVersion
+            WHERE ContentDocumentId IN :contentDocIds
+            AND IsLatest = true
+            WITH SECURITY_ENFORCED
+        ];
+        
+        // Build attachment wrappers
+        for (ContentVersion cv : versions) {
+            Id emailId = docToEmailMap.get(cv.ContentDocumentId);
+            
+            if (emailId != null && cv.ContentSize <= MAX_ATTACHMENT_SIZE) {
+                AttachmentWrapper aw = new AttachmentWrapper();
+                aw.fileName = cv.Title + (String.isNotBlank(cv.FileExtension) ? '.' + cv.FileExtension : '');
+                aw.contentType = getMimeType(cv.FileType, cv.FileExtension);
+                aw.size = cv.ContentSize;
+                aw.base64Content = EncodingUtil.base64Encode(cv.VersionData);
+                
+                attachmentMap.get(emailId).add(aw);
+            }
+        }
+        
+        return attachmentMap;
+    }
+    
+    /**
+     * Get MIME type based on file type and extension
+     */
+    private static String getMimeType(String fileType, String extension) {
+        if (String.isBlank(fileType) && String.isBlank(extension)) {
+            return 'application/octet-stream';
+        }
+        
+        String ext = String.isNotBlank(extension) ? extension.toLowerCase() : '';
+        
+        Map<String, String> mimeTypes = new Map<String, String>{
+            'pdf' => 'application/pdf',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls' => 'application/vnd.ms-excel',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'ppt' => 'application/vnd.ms-powerpoint',
+            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'txt' => 'text/plain',
+            'csv' => 'text/csv',
+            'html' => 'text/html',
+            'htm' => 'text/html',
+            'xml' => 'application/xml',
+            'json' => 'application/json',
+            'zip' => 'application/zip',
+            'rar' => 'application/x-rar-compressed',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'bmp' => 'image/bmp',
+            'svg' => 'image/svg+xml',
+            'ico' => 'image/x-icon',
+            'mp3' => 'audio/mpeg',
+            'wav' => 'audio/wav',
+            'mp4' => 'video/mp4',
+            'avi' => 'video/x-msvideo',
+            'mov' => 'video/quicktime'
+        };
+        
+        return mimeTypes.containsKey(ext) ? mimeTypes.get(ext) : 'application/octet-stream';
+    }
 
     /**
      * AuraEnabled method for LWC integration
      * Returns selected emails as EML content for client-side ZIP creation
+     * Includes attachments in MIME multipart format
      */
     @AuraEnabled
     public static List<EmailContentWrapper> getEmailsForDownload(List<Id> emailIds) {
@@ -111,6 +276,9 @@ public with sharing class EmailForwarder {
             if (emailMap.isEmpty()) {
                 throw new AuraHandledException('No email messages found for the provided IDs.');
             }
+            
+            // Get attachments for all emails
+            Map<Id, List<AttachmentWrapper>> attachmentMap = getEmailAttachments(emailMap.keySet());
 
             List<EmailContentWrapper> emailContents = new List<EmailContentWrapper>();
             
@@ -118,20 +286,9 @@ public with sharing class EmailForwarder {
                 EmailMessage em = emailMap.get(emailId);
                 if (em == null) continue;
 
-                String fromAddr = String.isNotBlank(em.FromAddress) ? em.FromAddress : '';
-                String toAddr = String.isNotBlank(em.ToAddress) ? em.ToAddress : '';
-                String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
-                String dateStr = em.MessageDate != null ? em.MessageDate.formatGmt('EEE, d MMM yyyy HH:mm:ss Z') : '';
-                String body = String.isNotBlank(em.HtmlBody) ? em.HtmlBody : (String.isNotBlank(em.TextBody) ? em.TextBody : '');
-
-                String emlContent = 'From: ' + fromAddr + '\r\n' +
-                                    'To: ' + toAddr + '\r\n' +
-                                    'Date: ' + dateStr + '\r\n' +
-                                    'Subject: ' + subject + '\r\n' +
-                                    'MIME-Version: 1.0\r\n' +
-                                    'Content-Type: text/html; charset=UTF-8\r\n\r\n' + 
-                                    body;
+                String emlContent = buildEmlContent(em, attachmentMap.get(emailId));
                 
+                String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
                 String safeSubject = subject.replaceAll('[^a-zA-Z0-9]', '_');
                 if (String.isBlank(safeSubject)) {
                     safeSubject = 'Email_' + String.valueOf(emailId).left(15);
@@ -154,6 +311,74 @@ public with sharing class EmailForwarder {
             throw new AuraHandledException('Error preparing emails for download: ' + e.getMessage());
         }
     }
+    
+    /**
+     * Build EML content with proper MIME format including attachments
+     */
+    private static String buildEmlContent(EmailMessage em, List<AttachmentWrapper> attachments) {
+        String fromAddr = String.isNotBlank(em.FromAddress) ? em.FromAddress : '';
+        String toAddr = String.isNotBlank(em.ToAddress) ? em.ToAddress : '';
+        String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
+        String dateStr = em.MessageDate != null ? em.MessageDate.formatGmt('EEE, d MMM yyyy HH:mm:ss Z') : '';
+        String body = String.isNotBlank(em.HtmlBody) ? em.HtmlBody : (String.isNotBlank(em.TextBody) ? em.TextBody : '');
+        Boolean isHtml = String.isNotBlank(em.HtmlBody);
+        
+        // Check if we have attachments
+        Boolean hasAttachments = attachments != null && !attachments.isEmpty();
+        
+        String emlContent = '';
+        
+        // Common headers
+        emlContent += 'From: ' + fromAddr + '\r\n';
+        emlContent += 'To: ' + toAddr + '\r\n';
+        emlContent += 'Date: ' + dateStr + '\r\n';
+        emlContent += 'Subject: ' + subject + '\r\n';
+        emlContent += 'MIME-Version: 1.0\r\n';
+        
+        if (hasAttachments) {
+            // Multipart message with attachments
+            emlContent += 'Content-Type: multipart/mixed; boundary="' + BOUNDARY + '"\r\n';
+            emlContent += '\r\n';
+            emlContent += 'This is a multi-part message in MIME format.\r\n';
+            emlContent += '\r\n';
+            
+            // Body part
+            emlContent += '--' + BOUNDARY + '\r\n';
+            emlContent += 'Content-Type: ' + (isHtml ? 'text/html' : 'text/plain') + '; charset=UTF-8\r\n';
+            emlContent += 'Content-Transfer-Encoding: quoted-printable\r\n';
+            emlContent += '\r\n';
+            emlContent += body + '\r\n';
+            emlContent += '\r\n';
+            
+            // Attachment parts
+            for (AttachmentWrapper att : attachments) {
+                emlContent += '--' + BOUNDARY + '\r\n';
+                emlContent += 'Content-Type: ' + att.contentType + '; name="' + att.fileName + '"\r\n';
+                emlContent += 'Content-Disposition: attachment; filename="' + att.fileName + '"\r\n';
+                emlContent += 'Content-Transfer-Encoding: base64\r\n';
+                emlContent += '\r\n';
+                
+                // Add base64 content with line breaks every 76 characters (RFC 2045)
+                String base64 = att.base64Content;
+                Integer lineLength = 76;
+                for (Integer i = 0; i < base64.length(); i += lineLength) {
+                    Integer endIdx = Math.min(i + lineLength, base64.length());
+                    emlContent += base64.substring(i, endIdx) + '\r\n';
+                }
+                emlContent += '\r\n';
+            }
+            
+            // End boundary
+            emlContent += '--' + BOUNDARY + '--\r\n';
+        } else {
+            // Simple message without attachments
+            emlContent += 'Content-Type: ' + (isHtml ? 'text/html' : 'text/plain') + '; charset=UTF-8\r\n';
+            emlContent += '\r\n';
+            emlContent += body;
+        }
+        
+        return emlContent;
+    }
 
     /**
      * Wrapper class for email content to be used in client-side ZIP creation
@@ -166,6 +391,16 @@ public with sharing class EmailForwarder {
             this.fileName = fileName;
             this.content = content;
         }
+    }
+    
+    /**
+     * Wrapper class for attachment data
+     */
+    private class AttachmentWrapper {
+        public String fileName { get; set; }
+        public String contentType { get; set; }
+        public Integer size { get; set; }
+        public String base64Content { get; set; }
     }
 
     /**
@@ -198,31 +433,23 @@ public with sharing class EmailForwarder {
         if (emailMap.isEmpty()) {
             throw new AuraHandledException('No email messages found for the provided IDs.');
         }
+        
+        // Get attachments for all emails
+        Map<Id, List<AttachmentWrapper>> attachmentMap = getEmailAttachments(emailMap.keySet());
 
         List<Messaging.EmailFileAttachment> attachments = new List<Messaging.EmailFileAttachment>();
+        Integer totalAttachmentSize = 0;
 
         for (Id emailId : emailIds) {
             EmailMessage em = emailMap.get(emailId);
             if (em == null) continue;
 
-            // Safe null handling for all fields using String.isNotBlank
-            String fromAddr = String.isNotBlank(em.FromAddress) ? em.FromAddress : '';
-            String toAddr = String.isNotBlank(em.ToAddress) ? em.ToAddress : '';
-            String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
-            String dateStr = em.MessageDate != null ? em.MessageDate.formatGmt('EEE, d MMM yyyy HH:mm:ss Z') : '';
-            String body = String.isNotBlank(em.HtmlBody) ? em.HtmlBody : (String.isNotBlank(em.TextBody) ? em.TextBody : '');
-
-            // Build EML (MIME) Format
-            String emlContent = 'From: ' + fromAddr + '\r\n' +
-                                'To: ' + toAddr + '\r\n' +
-                                'Date: ' + dateStr + '\r\n' +
-                                'Subject: ' + subject + '\r\n' +
-                                'MIME-Version: 1.0\r\n' +
-                                'Content-Type: text/html; charset=UTF-8\r\n\r\n' + 
-                                body;
+            // Build EML content with attachments
+            String emlContent = buildEmlContent(em, attachmentMap.get(emailId));
             
             Messaging.EmailFileAttachment efa = new Messaging.EmailFileAttachment();
             // Use .eml extension so it opens as an email record
+            String subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
             String safeSubject = subject.replaceAll('[^a-zA-Z0-9]', '_');
             if (String.isBlank(safeSubject)) {
                 safeSubject = 'Email_' + String.valueOf(emailId).left(15);
@@ -232,7 +459,16 @@ public with sharing class EmailForwarder {
                 safeSubject = safeSubject.left(50);
             }
             efa.setFileName(safeSubject + '.eml');
-            efa.setBody(Blob.valueOf(emlContent));
+            
+            Blob emlBlob = Blob.valueOf(emlContent);
+            totalAttachmentSize += emlBlob.size();
+            
+            // Check total size limit
+            if (totalAttachmentSize > MAX_TOTAL_ATTACHMENT_SIZE) {
+                throw new AuraHandledException('Total attachment size exceeds 25MB limit. Please select fewer emails or emails with smaller attachments.');
+            }
+            
+            efa.setBody(emlBlob);
             efa.setContentType('message/rfc822'); // Correct MIME type for email files
             attachments.add(efa);
         }
@@ -313,6 +549,7 @@ public with sharing class EmailForwarder {
         @AuraEnabled public String status { get; set; }
         @AuraEnabled public Boolean incoming { get; set; }
         @AuraEnabled public String direction { get; set; }
+        @AuraEnabled public Integer attachmentCount { get; set; }
         
         public EmailMessageWrapper(EmailMessage em) {
             this.id = em.Id;
@@ -324,6 +561,7 @@ public with sharing class EmailForwarder {
             this.status = em.Status;
             this.incoming = em.Incoming;
             this.direction = em.Incoming ? 'Incoming' : 'Outgoing';
+            this.attachmentCount = 0;
         }
     }
 }

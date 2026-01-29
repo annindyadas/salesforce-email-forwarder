@@ -12,35 +12,43 @@ const COLUMNS = [
         type: 'text', 
         sortable: true,
         wrapText: true,
-        initialWidth: 300
+        initialWidth: 280
     },
     { 
         label: 'From', 
         fieldName: 'fromAddress', 
         type: 'text', 
         sortable: true,
-        initialWidth: 200
+        initialWidth: 180
     },
     { 
         label: 'To', 
         fieldName: 'toAddress', 
         type: 'text', 
         sortable: true,
-        initialWidth: 200
+        initialWidth: 180
     },
     { 
         label: 'Date', 
         fieldName: 'formattedDate', 
         type: 'text', 
         sortable: true,
-        initialWidth: 160
+        initialWidth: 150
     },
     { 
         label: 'Direction', 
         fieldName: 'direction', 
         type: 'text', 
         sortable: true,
-        initialWidth: 100
+        initialWidth: 90
+    },
+    { 
+        label: 'Attachments', 
+        fieldName: 'attachmentCount', 
+        type: 'number', 
+        sortable: true,
+        initialWidth: 100,
+        cellAttributes: { alignment: 'center' }
     }
 ];
 

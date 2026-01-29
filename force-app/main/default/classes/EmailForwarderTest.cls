@@ -515,4 +515,244 @@ private class EmailForwarderTest {
         // With only 3 test emails, verify we get all of them
         System.assertEquals(3, result.size(), 'Should return all test emails within limit');
     }
+    
+    /**
+     * @description Test attachment count is returned in wrapper
+     */
+    @isTest
+    static void testAttachmentCountInWrapper() {
+        Case testCase = getTestCase();
+        
+        Test.startTest();
+        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        Test.stopTest();
+        
+        // Verify attachmentCount property exists and is 0 (no attachments in test data)
+        System.assertNotEquals(null, result, 'Result should not be null');
+        for (EmailForwarder.EmailMessageWrapper wrapper : result) {
+            System.assertNotEquals(null, wrapper.attachmentCount, 'Attachment count should not be null');
+            System.assertEquals(0, wrapper.attachmentCount, 'Should have 0 attachments');
+        }
+    }
+    
+    /**
+     * @description Test email with ContentDocumentLink attachment
+     */
+    @isTest
+    static void testEmailWithAttachment() {
+        Case testCase = getTestCase();
+        
+        // Create an email for attachment test
+        EmailMessage emailWithAttachment = new EmailMessage(
+            ParentId = testCase.Id,
+            Subject = 'Email With Attachment',
+            TextBody = 'This email has an attachment',
+            FromAddress = 'sender@test.com',
+            ToAddress = 'recipient@test.com',
+            MessageDate = DateTime.now(),
+            Incoming = true
+        );
+        insert emailWithAttachment;
+        
+        // Create a ContentVersion (file)
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestAttachment',
+            PathOnClient = 'TestAttachment.txt',
+            VersionData = Blob.valueOf('Test file content for attachment'),
+            IsMajorVersion = true
+        );
+        insert cv;
+        
+        // Get the ContentDocumentId
+        cv = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+        
+        // Link the file to the EmailMessage
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            ContentDocumentId = cv.ContentDocumentId,
+            LinkedEntityId = emailWithAttachment.Id,
+            ShareType = 'V'
+        );
+        insert cdl;
+        
+        Test.startTest();
+        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        Test.stopTest();
+        
+        // Find the email with attachment
+        Boolean foundAttachment = false;
+        for (EmailForwarder.EmailMessageWrapper wrapper : result) {
+            if (wrapper.subject == 'Email With Attachment') {
+                System.assertEquals(1, wrapper.attachmentCount, 'Should have 1 attachment');
+                foundAttachment = true;
+            }
+        }
+        System.assert(foundAttachment, 'Should find the email with attachment');
+    }
+    
+    /**
+     * @description Test getEmailsForDownload with attachment
+     */
+    @isTest
+    static void testGetEmailsForDownload_WithAttachment() {
+        Case testCase = getTestCase();
+        
+        // Create an email for attachment test
+        EmailMessage emailWithAttachment = new EmailMessage(
+            ParentId = testCase.Id,
+            Subject = 'Download Test With Attachment',
+            TextBody = 'This email has an attachment for download',
+            FromAddress = 'sender@test.com',
+            ToAddress = 'recipient@test.com',
+            MessageDate = DateTime.now(),
+            Incoming = true
+        );
+        insert emailWithAttachment;
+        
+        // Create a ContentVersion (file)
+        ContentVersion cv = new ContentVersion(
+            Title = 'DownloadTestFile',
+            PathOnClient = 'DownloadTestFile.pdf',
+            VersionData = Blob.valueOf('PDF content simulation'),
+            IsMajorVersion = true
+        );
+        insert cv;
+        
+        // Get the ContentDocumentId
+        cv = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+        
+        // Link the file to the EmailMessage
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            ContentDocumentId = cv.ContentDocumentId,
+            LinkedEntityId = emailWithAttachment.Id,
+            ShareType = 'V'
+        );
+        insert cdl;
+        
+        Test.startTest();
+        List<EmailForwarder.EmailContentWrapper> result = EmailForwarder.getEmailsForDownload(
+            new List<String>{ emailWithAttachment.Id }
+        );
+        Test.stopTest();
+        
+        System.assertEquals(1, result.size(), 'Should return 1 email');
+        // Verify the EML content contains multipart MIME structure
+        System.assert(result[0].content.contains('multipart/mixed'), 'Should be multipart MIME format');
+        System.assert(result[0].content.contains('DownloadTestFile'), 'Should contain attachment filename');
+    }
+    
+    /**
+     * @description Test forwardSelectedEmails with attachment
+     */
+    @isTest
+    static void testForwardSelectedEmails_WithAttachment() {
+        Case testCase = getTestCase();
+        
+        // Create an email for attachment test
+        EmailMessage emailWithAttachment = new EmailMessage(
+            ParentId = testCase.Id,
+            Subject = 'Forward Test With Attachment',
+            TextBody = 'This email has an attachment to forward',
+            FromAddress = 'sender@test.com',
+            ToAddress = 'recipient@test.com',
+            MessageDate = DateTime.now(),
+            Incoming = true
+        );
+        insert emailWithAttachment;
+        
+        // Create a ContentVersion (file)
+        ContentVersion cv = new ContentVersion(
+            Title = 'ForwardTestFile',
+            PathOnClient = 'ForwardTestFile.docx',
+            VersionData = Blob.valueOf('Document content simulation'),
+            IsMajorVersion = true
+        );
+        insert cv;
+        
+        // Get the ContentDocumentId
+        cv = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+        
+        // Link the file to the EmailMessage
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            ContentDocumentId = cv.ContentDocumentId,
+            LinkedEntityId = emailWithAttachment.Id,
+            ShareType = 'V'
+        );
+        insert cdl;
+        
+        Test.startTest();
+        String result = EmailForwarder.forwardSelectedEmails(
+            new List<String>{ emailWithAttachment.Id },
+            'test@example.com'
+        );
+        Test.stopTest();
+        
+        System.assert(result.contains('Success'), 'Should successfully forward email with attachment');
+    }
+    
+    /**
+     * @description Test email with multiple attachments
+     */
+    @isTest
+    static void testEmailWithMultipleAttachments() {
+        Case testCase = getTestCase();
+        
+        // Create an email for multiple attachments test
+        EmailMessage emailWithAttachments = new EmailMessage(
+            ParentId = testCase.Id,
+            Subject = 'Multiple Attachments Test',
+            TextBody = 'This email has multiple attachments',
+            FromAddress = 'sender@test.com',
+            ToAddress = 'recipient@test.com',
+            MessageDate = DateTime.now(),
+            Incoming = true
+        );
+        insert emailWithAttachments;
+        
+        // Create multiple ContentVersions
+        List<ContentVersion> cvList = new List<ContentVersion>();
+        cvList.add(new ContentVersion(
+            Title = 'Attachment1',
+            PathOnClient = 'Attachment1.txt',
+            VersionData = Blob.valueOf('First attachment content'),
+            IsMajorVersion = true
+        ));
+        cvList.add(new ContentVersion(
+            Title = 'Attachment2',
+            PathOnClient = 'Attachment2.pdf',
+            VersionData = Blob.valueOf('Second attachment content'),
+            IsMajorVersion = true
+        ));
+        cvList.add(new ContentVersion(
+            Title = 'Attachment3',
+            PathOnClient = 'Attachment3.jpg',
+            VersionData = Blob.valueOf('Third attachment content'),
+            IsMajorVersion = true
+        ));
+        insert cvList;
+        
+        // Get ContentDocumentIds and create links
+        List<ContentDocumentLink> cdlList = new List<ContentDocumentLink>();
+        for (ContentVersion cv : [SELECT ContentDocumentId FROM ContentVersion WHERE Id IN :cvList]) {
+            cdlList.add(new ContentDocumentLink(
+                ContentDocumentId = cv.ContentDocumentId,
+                LinkedEntityId = emailWithAttachments.Id,
+                ShareType = 'V'
+            ));
+        }
+        insert cdlList;
+        
+        Test.startTest();
+        List<EmailForwarder.EmailMessageWrapper> result = EmailForwarder.getEmailsByRecordId(testCase.Id);
+        Test.stopTest();
+        
+        // Find the email with multiple attachments
+        Boolean foundEmail = false;
+        for (EmailForwarder.EmailMessageWrapper wrapper : result) {
+            if (wrapper.subject == 'Multiple Attachments Test') {
+                System.assertEquals(3, wrapper.attachmentCount, 'Should have 3 attachments');
+                foundEmail = true;
+            }
+        }
+        System.assert(foundEmail, 'Should find the email with multiple attachments');
+    }
 }
