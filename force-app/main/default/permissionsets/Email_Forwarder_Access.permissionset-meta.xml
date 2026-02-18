@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <classAccesses>
+        <apexClass>EmailForwarder</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>EmailForwarderTest</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description>Provides access for Email Forward &amp; Download feature that are part of managed package</description>
+    <flowAccesses>
+        <enabled>true</enabled>
+        <flow>Download_Email</flow>
+    </flowAccesses>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Email Forwarder Access</label>
+</PermissionSet>

@@ -52,6 +52,56 @@ public with sharing class EmailForwarder {
     }
 
     /**
+     * Get details for a single EmailMessage
+     * Used by the EmailDownloader LWC component
+     * Returns subject and attachment count for display
+     */
+    @AuraEnabled
+    public static EmailDetailWrapper getEmailDetails(Id emailId) {
+        try {
+            if (emailId == null) {
+                throw new AuraHandledException('Email ID is required.');
+            }
+            
+            // Check object-level access
+            if (!Schema.sObjectType.EmailMessage.isAccessible()) {
+                throw new AuraHandledException('You do not have permission to view email messages.');
+            }
+            
+            List<EmailMessage> emails = [
+                SELECT Id, Subject
+                FROM EmailMessage 
+                WHERE Id = :emailId
+                WITH SECURITY_ENFORCED
+                LIMIT 1
+            ];
+            
+            if (emails.isEmpty()) {
+                throw new AuraHandledException('Email message not found.');
+            }
+            
+            EmailMessage em = emails[0];
+            
+            // Get attachment count
+            Set<Id> emailIds = new Set<Id>{ emailId };
+            Map<Id, Integer> attachmentCounts = getAttachmentCounts(emailIds);
+            
+            EmailDetailWrapper wrapper = new EmailDetailWrapper();
+            wrapper.subject = String.isNotBlank(em.Subject) ? em.Subject : '(No Subject)';
+            wrapper.attachmentCount = attachmentCounts.containsKey(emailId) ? attachmentCounts.get(emailId) : 0;
+            
+            return wrapper;
+            
+        } catch (System.QueryException qe) {
+            throw new AuraHandledException('You do not have permission to access one or more email fields.');
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AuraHandledException('Error retrieving email details: ' + e.getMessage());
+        }
+    }
+
+    /**
      * Retrieves all EmailMessages related to a specific record
      * Enforces CRUD/FLS security checks
      * Note: Not cacheable to ensure fresh data on each call
@@ -563,5 +613,13 @@ public with sharing class EmailForwarder {
             this.direction = em.Incoming ? 'Incoming' : 'Outgoing';
             this.attachmentCount = 0;
         }
+    }
+    
+    /**
+     * Wrapper class for email details (used by EmailDownloader component)
+     */
+    public class EmailDetailWrapper {
+        @AuraEnabled public String subject { get; set; }
+        @AuraEnabled public Integer attachmentCount { get; set; }
     }
 }

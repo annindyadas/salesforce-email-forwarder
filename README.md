@@ -41,7 +41,27 @@ This feature provides a user-friendly modal interface that displays all emails a
 
 | Component | Description |
 |-----------|-------------|
-| `emailForwarderModal` | Modal component with datatable for selecting and forwarding emails |
+| `emailForwarderModal` | Modal component with datatable for selecting and forwarding emails from any object |
+| `emailDownloader` | Component for downloading a single email as EML file from EmailMessage record |
+| `emailUtils` | Shared utility module for ZIP creation, file downloads, and error handling |
+
+### Flows
+
+| Flow | Description |
+|------|-------------|
+| `Download_Email` | Screen Flow that wraps emailDownloader LWC for EmailMessage quick action |
+
+### Quick Actions
+
+| Action | Object | Description |
+|--------|--------|-------------|
+| `Download` | EmailMessage | Downloads the email as an EML file |
+
+### Permission Sets
+
+| Permission Set | Description |
+|----------------|-------------|
+| `Email_Forwarder_Access` | Grants access to Apex classes and Flow required for the feature |
 
 ## 📦 Installation
 
@@ -68,26 +88,78 @@ sf project deploy start -o MyOrg
 3. Authorize your Salesforce org
 4. Right-click on the `force-app` folder and select **Deploy Source to Org**
 
-## ⚙️ Configuration
+## 📋 Post-Installation Setup
 
-### Create a Quick Action
+After installing the package, complete the following steps:
 
-1. Go to **Setup → Object Manager → [Your Object] → Buttons, Links, and Actions**
-2. Click **New Action**
-3. Configure:
-   - Action Type: **Lightning Web Component**
-   - Lightning Web Component: **c:emailForwarderModal**
-   - Label: **Forward Emails**
-   - Name: **Forward_Emails**
-4. Click **Save**
-5. Add the action to your page layout
+### 1. Assign Permission Set
 
-### Email Deliverability
+1. Go to **Setup → Permission Sets**
+2. Click **Email Forwarder Access**
+3. Click **Manage Assignments** → **Add Assignment**
+4. Select users who need access to the feature
+5. Click **Assign**
 
-Ensure your org's email deliverability is configured:
+### 2. Configure Email Deliverability (Required for Send Feature)
 
 1. Go to **Setup → Email → Deliverability**
 2. Set **Access level** to **All Email**
+
+### 3. Add "Download" Action to EmailMessage Page Layout
+
+The Quick Action is included in the package but must be added to the page layout manually.
+
+1. Go to **Setup → Object Manager → Email Message → Page Layouts**
+2. Edit the **Email Message Layout**
+3. Scroll to **Salesforce Mobile and Lightning Experience Actions** section
+4. Click the wrench icon to override predefined actions (if needed)
+5. Drag **Download** from available actions to the action bar
+6. Click **Save**
+
+### 4. Setup "Forward Emails" Action (Per Object)
+
+This action needs to be created manually on each object where you want the forward emails feature (e.g., Case, Contact, Account, Opportunity).
+
+#### Create Quick Action:
+
+1. Go to **Setup → Object Manager → [Your Object]** (e.g., Case)
+2. Click **Buttons, Links, and Actions** → **New Action**
+3. Configure:
+   | Field | Value |
+   |-------|-------|
+   | Action Type | Lightning Web Component |
+   | Lightning Web Component | `c:emailForwarderModal` |
+   | Label | Forward Emails |
+   | Name | Forward_Emails |
+4. Click **Save**
+
+#### Add to Page Layout:
+
+1. Go to **[Object] → Page Layouts** → Edit your layout
+2. Scroll to **Salesforce Mobile and Lightning Experience Actions**
+3. Click the wrench icon to override predefined actions (if needed)
+4. Drag **Forward Emails** to the action bar
+5. Click **Save**
+
+#### For Dynamic Actions (Lightning App Builder):
+
+If your org uses Dynamic Actions on Lightning Record Pages:
+
+1. Go to **Setup → Lightning App Builder**
+2. Edit the Record Page for your object
+3. Select the **Highlights Panel** component
+4. In properties, find **Actions** section
+5. Click **Add Action** → Select **Forward Emails**
+6. Save and Activate the page
+
+### ✅ Setup Checklist
+
+| Step | Task | Included in Package | Manual Action |
+|------|------|:-------------------:|:-------------:|
+| 1 | Permission Set | ✅ | Assign to users |
+| 2 | Email Deliverability | — | Configure in Setup |
+| 3 | Download Action (EmailMessage) | ✅ | Add to page layout |
+| 4 | Forward Emails Action (Other Objects) | — | Create action & add to layout |
 
 ## 🖥️ Usage
 
@@ -110,12 +182,16 @@ force-app/
         │   ├── EmailForwarder.cls-meta.xml
         │   ├── EmailForwarderTest.cls
         │   └── EmailForwarderTest.cls-meta.xml
-        └── lwc/
-            └── emailForwarderModal/
-                ├── emailForwarderModal.html
-                ├── emailForwarderModal.js
-                ├── emailForwarderModal.css
-                └── emailForwarderModal.js-meta.xml
+        ├── flows/
+        │   └── Download_Email.flow-meta.xml
+        ├── lwc/
+        │   ├── emailDownloader/
+        │   ├── emailForwarderModal/
+        │   └── emailUtils/
+        ├── permissionsets/
+        │   └── Email_Forwarder_Access.permissionset-meta.xml
+        └── quickActions/
+            └── EmailMessage.Download.quickAction-meta.xml
 ```
 
 ## 🔧 Technical Details
