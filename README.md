@@ -4,12 +4,6 @@ A Lightning Web Component (LWC) solution for Salesforce that allows users to sel
 
 ![Salesforce](https://img.shields.io/badge/Salesforce-00A1E0?style=for-the-badge&logo=salesforce&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-# Salesforce Email Forwarder LWC
-
-A Lightning Web Component (LWC) solution for Salesforce that allows users to select and forward emails from any Salesforce object record as `.eml` file attachments.
-
-![Salesforce](https://img.shields.io/badge/Salesforce-00A1E0?style=for-the-badge&logo=salesforce&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## 📋 Overview
 
