@@ -122,6 +122,22 @@ private class EmailForwarderTest {
     }
     
     /**
+     * @description Test getEmailDetails with valid EmailMessage Id
+     */
+    @isTest
+    static void testGetEmailDetails_ValidId() {
+        List<EmailMessage> emails = getTestEmails();
+        System.assert(emails.size() > 0, 'Test emails should exist');
+        Id emailId = emails[0].Id;
+        Test.startTest();
+        EmailForwarder.EmailDetailWrapper details = EmailForwarder.getEmailDetails(emailId);
+        Test.stopTest();
+        System.assertNotEquals(null, details, 'Details should not be null');
+        System.assertNotEquals(null, details.subject, 'Subject should not be null');
+        System.assert(details.attachmentCount >= 0, 'Attachment count should be non-negative');
+    }
+    
+    /**
      * @description Test getEmailsByRecordId with valid Id but no emails
      */
     @isTest
