@@ -1,4 +1,4 @@
-# Email Forward & Download for Salesforce
+# Email F&D (Forward & Download) for Salesforce
 
 ## ⚠️ Prerequisites
 
@@ -20,7 +20,7 @@ A Lightning Web Component (LWC) solution for Salesforce that allows users to sel
 
 ## 📋 Overview
 
-Email Forward & Download provides a user-friendly modal interface that displays all emails associated with a Salesforce record. Users can select one or multiple emails using checkboxes, download them as `.eml` files, or forward them to any email address as `.eml` attachments, preserving the original email format.
+Email F&D (Forward & Download) provides a user-friendly modal interface that displays all emails associated with a Salesforce record. Users can select one or multiple emails using checkboxes, download them as `.eml` files, or forward them to any email address as `.eml` attachments, preserving the original email format.
 
 ## ✨ Features
 
@@ -81,8 +81,8 @@ Email Forward & Download provides a user-friendly modal interface that displays 
 
 | Permission Set | Custom Permissions | Description |
 |----------------|-------------------|-------------|
-| `Email_Forwarder_Full_Access` | Forward + Download | Email F&D Full Access - for Sys Admins and power users |
-| `Email_Forwarder_Download_Only` | Download only | Email F&D Download Only - for standard users |
+| `Email F&D Full Access` | Forward + Download | Full access - for Sys Admins and power users |
+| `Email F&D Download Only` | Download only | Limited access - for standard users |
 
 
 ## ⚠️ Installation Best Practice
@@ -103,7 +103,7 @@ This ensures that only administrators have access to package features by default
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/salesforce-email-forwarder.git
+git clone https://github.com/YOUR_USERNAME/salesforce-email-fd-forward-download.git
 
 # Navigate to the project directory
 cd salesforce-email-forwarder
@@ -281,6 +281,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Product Name:** Email F&D (Forward & Download)
 
 ## 🙏 Acknowledgments
 
