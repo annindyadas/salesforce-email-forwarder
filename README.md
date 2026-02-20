@@ -1,5 +1,18 @@
 # Email Forward & Download for Salesforce
 
+## ⚠️ Prerequisites
+
+To ensure full functionality, especially for attachment handling, please review these prerequisites before installing:
+
+- **Save Email-to-Case attachments as Salesforce files** must be enabled in Email-to-Case settings. This ensures email attachments are stored as ContentDocument files and are accessible to the app.
+   - Go to **Setup → Email-to-Case**
+   - Enable **Save Email-to-Case attachments as Salesforce files**
+   - Click **Save**
+- Salesforce org must have **EmailMessage** object enabled (standard in most orgs).
+- Assign the provided permission sets to users as needed (see below).
+
+Failure to enable the above setting may result in missing attachments when forwarding or downloading emails.
+
 A Lightning Web Component (LWC) solution for Salesforce that allows users to select, download, and forward emails from any Salesforce object record as `.eml` file attachments.
 
 ![Salesforce](https://img.shields.io/badge/Salesforce-00A1E0?style=for-the-badge&logo=salesforce&logoColor=white)
