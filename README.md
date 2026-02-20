@@ -71,6 +71,19 @@ Email Forward & Download provides a user-friendly modal interface that displays 
 | `Email_Forwarder_Full_Access` | Forward + Download | Full access - for Sys Admins and power users |
 | `Email_Forwarder_Download_Only` | Download only | Limited access - for standard users |
 
+
+## ⚠️ Installation Best Practice
+
+**For security, always install the package using "For Admins Only".**
+
+This ensures that only administrators have access to package features by default. You can then assign the provided permission sets to users who need access. If you install "For All Users", all users will automatically get access to the custom permissions and Apex classes, which may defeat the purpose of permission set-based security.
+
+**Recommended steps:**
+- Install the package "For Admins Only"
+- Assign the appropriate permission set(s) to users who need access (see below)
+
+---
+
 ## 📦 Installation
 
 ### Option 1: Deploy using Salesforce CLI
