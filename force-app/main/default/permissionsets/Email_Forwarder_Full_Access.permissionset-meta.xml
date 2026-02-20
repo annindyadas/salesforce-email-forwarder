@@ -22,5 +22,5 @@
         <flow>Download_Email</flow>
     </flowAccesses>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>Email Forwarder Full Access</label>
+    <label>Email F&D Full Access</label>
 </PermissionSet>

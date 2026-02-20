@@ -18,5 +18,5 @@
         <flow>Download_Email</flow>
     </flowAccesses>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>Email Download Only</label>
+    <label>Email F&D Download Only</label>
 </PermissionSet>

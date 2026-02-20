@@ -81,8 +81,8 @@ Email Forward & Download provides a user-friendly modal interface that displays 
 
 | Permission Set | Custom Permissions | Description |
 |----------------|-------------------|-------------|
-| `Email_Forwarder_Full_Access` | Forward + Download | Full access - for Sys Admins and power users |
-| `Email_Forwarder_Download_Only` | Download only | Limited access - for standard users |
+| `Email_Forwarder_Full_Access` | Forward + Download | Email F&D Full Access - for Sys Admins and power users |
+| `Email_Forwarder_Download_Only` | Download only | Email F&D Download Only - for standard users |
 
 
 ## ⚠️ Installation Best Practice
@@ -132,8 +132,8 @@ Assign the appropriate permission set based on user needs:
 
 | User Type | Permission Set | Capabilities |
 |-----------|----------------|--------------|
-| Sys Admins / Power Users | **Email Forwarder Full Access** | Forward + Download |
-| Standard Users | **Email Forwarder Download Only** | Download only |
+| Sys Admins / Power Users | **Email F&D Full Access** | Forward + Download |
+| Standard Users | **Email F&D Download Only** | Download only |
 
 **Steps:**
 1. Go to **Setup → Permission Sets**
