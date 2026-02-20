@@ -2,7 +2,7 @@
   "packageDirectories": [
     {
       "versionName": "Spring '26",
-      "versionNumber": "1.0.0.NEXT",
+      "versionNumber": "1.0.1.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Email Forward & Download",
@@ -19,6 +19,9 @@
     "Email Forward & Download@1.0.0-2": "04taj000000NVKrAAO",
     "Email Forward & Download@1.0.0-3": "04taj000000NVMTAA4",
     "Email Forward & Download@1.0.0-4": "04taj000000NVfpAAG",
-    "Email Forward & Download@1.0.0-5": "04taj000000NXUjAAO"
+    "Email Forward & Download@1.0.0-5": "04taj000000NXUjAAO",
+    "Email Forward & Download@1.0.0-6": "04taj000000NcEHAA0",
+    "Email Forward & Download@1.0.0-7": "04taj000000NcKjAAK",
+    "Email Forward & Download@1.0.0-8": "04taj000000NcMLAA0"
   }
 }
